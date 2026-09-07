@@ -968,6 +968,7 @@
       html += '<button class="btn accent small" id="btnStartWeekYes">Yes, start week '+meta.signup.weekNumber+'</button>';
     } else {
       html += '<button class="btn accent" id="btnStartWeek" '+(confirmedIds.length===0?'disabled':'')+'>Start week '+meta.signup.weekNumber+'</button>';
+      if(confirmedIds.length===0) html += '<span style="font-size:11.5px;color:var(--ink-faint);align-self:center;">Sign up at least one player below first.</span>';
     }
     html += '</div>';
     html += '</div>';
