@@ -597,6 +597,7 @@
     }
 
     if(!week.finalized){
+      html += '<div id="roundStatus" class="score-warn" style="text-align:right;"></div>';
       html += '<div class="actions">';
       if(week.rounds.length>1 && !hasAnyScore(round)){
         html += '<button class="btn ghost" id="btnReopen">Reopen previous round</button>';
@@ -618,23 +619,39 @@
   }
 
   function allScoresValid(round){
+    return missingCourts(round).length===0;
+  }
+
+  function missingCourts(round){
+    var missing = [];
     for(var c=1;c<=6;c++){
       var court = round.courts[c];
-      if(court.scoreA==null || court.scoreB==null) return false;
-      if(court.scoreA===court.scoreB) return false;
+      if(court.scoreA==null || court.scoreB==null) missing.push(c+" (needs both scores)");
+      else if(court.scoreA===court.scoreB) missing.push(c+" (scores can't tie)");
     }
-    return true;
+    return missing;
+  }
+
+  function refreshRoundStatus(round){
+    var el = byId("roundStatus");
+    if(!el) return;
+    var missing = missingCourts(round);
+    el.textContent = missing.length
+      ? "Still needed before you can rotate — Court " + missing.join(", Court ")
+      : "All 6 courts are in — ready to rotate.";
+    el.style.color = missing.length ? "var(--bench)" : "var(--win)";
   }
 
   function wireLive(round, week){
     document.querySelectorAll(".score-input").forEach(function(inp){
-      inp.addEventListener("input", function(){
+      var handler = function(){
         var c = this.dataset.court, side = this.dataset.side;
         var field = side==="teamA" ? "scoreA" : "scoreB";
         var v = this.value==="" ? null : parseInt(this.value,10);
         round.courts[c][field] = (v==null || isNaN(v)) ? null : v;
         var completeBtn = byId("btnComplete");
         if(completeBtn) completeBtn.disabled = !allScoresValid(round);
+        refreshRoundStatus(round);
         // live highlight without full re-render to keep focus
         var card = document.querySelector('.court-card[data-court="'+c+'"]');
         var court = round.courts[c];
@@ -643,11 +660,14 @@
           var key = idx===0 ? "teamA" : "teamB";
           row.classList.toggle("won", !!(wl && wl.winner===court[key]));
         });
-      });
+      };
+      inp.addEventListener("input", handler);
+      inp.addEventListener("change", handler);
     });
     var completeBtn = byId("btnComplete");
     if(completeBtn){
       completeBtn.disabled = !allScoresValid(round);
+      refreshRoundStatus(round);
       completeBtn.addEventListener("click", function(){
         var next = computeNextRound(round.courts, week.mode, week.benchQueue||[]);
         var newRound = {
