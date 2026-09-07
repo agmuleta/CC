@@ -127,6 +127,8 @@
   .team-names .amp{ color:var(--ink-faint); font-weight:400; margin:0 3px; }
   .team-row.won .team-names{ color:var(--win); font-weight:700; }
   .team-row.won .team-names::after{ content:" \2713"; }
+  .team-row.lost .team-names{ color:var(--ink-faint); }
+  .team-row.lost .score-input{ opacity:.7; }
   .score-input{
     width:64px; text-align:center; padding:8px 4px; border-radius:8px;
     border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
@@ -605,7 +607,8 @@
       ["teamA","teamB"].forEach(function(key){
         var team = court[key];
         var won = wl && wl.winner===team;
-        html += '<div class="team-row'+(won?' won':'')+'">';
+        var lost = wl && wl.loser===team;
+        html += '<div class="team-row'+(won?' won':'')+(lost?' lost':'')+'">';
         html += '<div class="team-names">'+team.map(nameOf).join(' <span class="amp">&amp;</span> ')+'</div>';
         html += '<input class="score-input" type="number" min="0" inputmode="numeric" data-court="'+c+'" data-side="'+key+'" value="'+(court[key.replace('team','score')]==null? '': court[key.replace('team','score')])+'" '+(week.finalized?'disabled':'')+'>';
         html += '</div>';
@@ -687,6 +690,7 @@
         card.querySelectorAll(".team-row").forEach(function(row, idx){
           var key = idx===0 ? "teamA" : "teamB";
           row.classList.toggle("won", !!(wl && wl.winner===court[key]));
+          row.classList.toggle("lost", !!(wl && wl.loser===court[key]));
         });
       };
       inp.addEventListener("input", handler);
