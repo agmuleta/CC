@@ -1,0 +1,912 @@
+<title>Challenge Courts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg:#F0F4F2;
+    --surface:#FFFFFF;
+    --surface-2:#E7EDEA;
+    --ink:#0F262E;
+    --ink-soft:#4E6A70;
+    --ink-faint:#8AA1A4;
+    --line:#D6E0DC;
+    --court:#1B4B63;
+    --court-soft:#E5EEF2;
+    --accent:#CFE23B;
+    --accent-ink:#1B2400;
+    --bench:#E4573D;
+    --bench-soft:#FBE4DE;
+    --win:#2E8B57;
+    --shadow: 0 1px 2px rgba(15,38,46,.06), 0 6px 20px rgba(15,38,46,.06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0D1A1E;
+      --surface:#132832;
+      --surface-2:#1B333D;
+      --ink:#E9F2F0;
+      --ink-soft:#9FBAC0;
+      --ink-faint:#5F8188;
+      --line:#25454F;
+      --court:#5FB4D6;
+      --court-soft:#173544;
+      --accent:#D7E639;
+      --accent-ink:#141B00;
+      --bench:#FF7A5C;
+      --bench-soft:#3A241E;
+      --win:#4FCB86;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D1A1E;
+    --surface:#132832;
+    --surface-2:#1B333D;
+    --ink:#E9F2F0;
+    --ink-soft:#9FBAC0;
+    --ink-faint:#5F8188;
+    --line:#25454F;
+    --court:#5FB4D6;
+    --court-soft:#173544;
+    --accent:#D7E639;
+    --accent-ink:#141B00;
+    --bench:#FF7A5C;
+    --bench-soft:#3A241E;
+    --win:#4FCB86;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans", system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:"Big Shoulders Display","IBM Plex Sans",sans-serif;
+    text-transform:uppercase; letter-spacing:.02em; text-wrap:balance;
+    margin:0;
+  }
+  .mono{ font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; }
+  button{ font-family:inherit; }
+  ::selection{ background:var(--accent); color:var(--accent-ink); }
+
+  header.top{
+    position:sticky; top:0; z-index:10;
+    background:var(--court); color:#fff;
+    padding:14px 16px 0;
+    box-shadow:var(--shadow);
+  }
+  .top-row{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{ font-size:26px; line-height:1; }
+  .brand h1{ font-size:22px; font-weight:800; color:#fff; }
+  .brand .sub{ font-size:12px; color:rgba(255,255,255,.72); text-transform:uppercase; letter-spacing:.08em; }
+  nav.tabs{ display:flex; gap:2px; margin-top:12px; overflow-x:auto; }
+  nav.tabs button{
+    background:transparent; border:none; color:rgba(255,255,255,.68);
+    padding:10px 14px; font-size:13px; font-weight:600; letter-spacing:.02em;
+    border-bottom:3px solid transparent; cursor:pointer; white-space:nowrap;
+  }
+  nav.tabs button.active{ color:#fff; border-bottom-color:var(--accent); }
+  nav.tabs button:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+
+  main{ max-width:900px; margin:0 auto; padding:18px 14px 64px; }
+  .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .panel + .panel{ margin-top:14px; }
+  .panel-pad{ padding:16px; }
+  .stack{ display:flex; flex-direction:column; gap:14px; }
+
+  .banner{
+    display:flex; align-items:center; gap:10px;
+    background:var(--court-soft); color:var(--ink);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 14px; font-size:13px; line-height:1.5;
+  }
+  .banner b{ color:var(--court); }
+  :root[data-theme="dark"] .banner b, @media (prefers-color-scheme:dark){ .banner b{ color:var(--court);} }
+
+  .round-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .round-head .display{ font-size:26px; color:var(--court); }
+  .round-head .meta{ font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; }
+
+  .ladder{ display:flex; flex-direction:column; gap:10px; }
+  .court-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px; box-shadow:var(--shadow); position:relative;
+  }
+  .court-card.zone{ border-color:var(--bench); }
+  .court-card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .court-num{ display:flex; align-items:center; gap:8px; }
+  .court-num .num{ font-family:"Big Shoulders Display"; font-size:22px; font-weight:800; color:var(--court); }
+  .court-num .lbl{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.08em; }
+  .zone-chip{ font-size:10px; background:var(--bench-soft); color:var(--bench); padding:3px 7px; border-radius:99px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .team-row{ display:grid; grid-template-columns:1fr 64px; gap:8px; align-items:center; padding:6px 0; }
+  .team-row + .team-row{ border-top:1px dashed var(--line); }
+  .team-names{ font-size:14.5px; font-weight:500; }
+  .team-names .amp{ color:var(--ink-faint); font-weight:400; margin:0 3px; }
+  .team-row.won .team-names{ color:var(--win); font-weight:700; }
+  .team-row.won .team-names::after{ content:" \2713"; }
+  .score-input{
+    width:64px; text-align:center; padding:8px 4px; border-radius:8px;
+    border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
+    font-family:"IBM Plex Mono"; font-size:16px; font-variant-numeric:tabular-nums;
+  }
+  .score-input:focus{ outline:2px solid var(--court); outline-offset:1px; }
+  .score-warn{ font-size:11px; color:var(--bench); margin-top:4px; }
+
+  .bench-strip{ background:var(--bench-soft); border:1px solid var(--bench); border-radius:var(--radius); padding:12px 14px; }
+  .bench-strip h3{ font-size:12px; color:var(--bench); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
+  .bench-names{ display:flex; flex-wrap:wrap; gap:6px; }
+  .bench-pill{ background:var(--surface); border:1px solid var(--bench); color:var(--ink); font-size:12.5px; padding:4px 10px; border-radius:99px; font-weight:500; }
+  .bench-pill .pos{ color:var(--bench); font-weight:700; margin-right:4px; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--court); color:#fff; border:none; border-radius:10px;
+    padding:12px 18px; font-size:14px; font-weight:700; letter-spacing:.02em;
+    cursor:pointer; text-transform:uppercase;
+  }
+  .btn:disabled{ background:var(--surface-2); color:var(--ink-faint); cursor:not-allowed; }
+  .btn.accent{ background:var(--accent); color:var(--accent-ink); }
+  .btn.ghost{ background:transparent; color:var(--court); border:1px solid var(--line); text-transform:none; font-weight:600; padding:9px 14px; }
+  .btn.small{ padding:7px 12px; font-size:12px; }
+  .btn.danger{ background:var(--bench); }
+  .actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td{ padding:9px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:600; cursor:pointer; user-select:none; }
+  th.sorted{ color:var(--court); }
+  td.num, th.num{ text-align:right; font-family:"IBM Plex Mono"; }
+  tbody tr:hover{ background:var(--surface-2); cursor:pointer; }
+  .table-wrap{ overflow-x:auto; border-radius:var(--radius); }
+  .rank-pill{ display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--court-soft); color:var(--court); font-size:11px; font-weight:700; font-family:"IBM Plex Mono"; }
+
+  .roster-row{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); }
+  .roster-row:last-child{ border-bottom:none; }
+  .roster-row .name{ flex:1; font-weight:600; font-size:14px; }
+  .roster-row .name .g{ color:var(--ink-faint); font-weight:400; font-size:11px; margin-left:6px; text-transform:uppercase; }
+  .pill{ font-size:10.5px; padding:4px 9px; border-radius:99px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .pill.confirmed{ background:var(--court-soft); color:var(--court); }
+  .pill.waitlist{ background:var(--bench-soft); color:var(--bench); }
+  .rowbtns{ display:flex; gap:6px; }
+  .iconbtn{ background:var(--surface-2); border:1px solid var(--line); color:var(--ink-soft); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
+  .iconbtn:hover{ background:var(--court-soft); color:var(--court); }
+
+  .stat-hero{ display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:1px; background:var(--line); border-radius:var(--radius); overflow:hidden; border:1px solid var(--line); }
+  .stat-hero .cell{ background:var(--surface); padding:14px 12px; }
+  .stat-hero .cell .v{ font-family:"IBM Plex Mono"; font-size:22px; font-weight:600; }
+  .stat-hero .cell .l{ font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.05em; margin-top:2px; }
+
+  .detail-close{ float:right; }
+  .h2h-pick{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  select{ font-family:inherit; padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:13.5px; }
+
+  .empty{ color:var(--ink-faint); font-size:13.5px; padding:20px; text-align:center; }
+  .section-title{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-faint); font-weight:600; margin-bottom:2px; }
+  .week-card{ padding:14px 16px; }
+  .week-card-head{ display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+  .week-seed{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-top:10px; }
+  .week-seed .c{ background:var(--surface-2); border-radius:10px; padding:8px 10px; font-size:12.5px; }
+  .week-seed .c b{ display:block; color:var(--court); font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; }
+
+  [hidden]{ display:none !important; }
+  @media (max-width:480px){
+    .team-row{ grid-template-columns:1fr 56px; }
+    .stat-hero{ grid-template-columns:repeat(3,1fr); }
+  }
+</style>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <span class="mark">🏓</span>
+      <div>
+        <h1>Challenge Courts</h1>
+        <div class="sub">Ladder &amp; Stats Tracker</div>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-view="live" class="active">Live Round</button>
+    <button data-view="standings">Standings</button>
+    <button data-view="roster">Roster &amp; Signup</button>
+    <button data-view="history">History</button>
+  </nav>
+</header>
+
+<main id="app">
+  <div class="empty">Loading…</div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  var ROSTER_SEED = [
+    {id:"ben", name:"Ben", gender:"M"},
+    {id:"mikey", name:"Mikey", gender:"M"},
+    {id:"charlie", name:"Charlie", gender:"F"},
+    {id:"sienna", name:"Sienna", gender:"F"},
+    {id:"bradon", name:"Bradon", gender:"M"},
+    {id:"andrew", name:"Andrew", gender:"M"},
+    {id:"jj-lebo", name:"JJ Lebo", gender:"M"},
+    {id:"cole", name:"Cole", gender:"M"},
+    {id:"hamza", name:"Hamza", gender:"M"},
+    {id:"caeden", name:"Caeden", gender:"M"},
+    {id:"matthew", name:"Matthew", gender:"M"},
+    {id:"dice", name:"Dice", gender:"M"},
+    {id:"titus", name:"Titus", gender:"M"},
+    {id:"nathan", name:"Nathan", gender:"M"},
+    {id:"luke", name:"Luke", gender:"M"},
+    {id:"jason-rice", name:"Jason Rice", gender:"M"},
+    {id:"isaac", name:"Isaac", gender:"M"},
+    {id:"analise", name:"Analise", gender:"F"},
+    {id:"tony", name:"Tony", gender:"M"},
+    {id:"andrew-loughan", name:"Andrew Loughan", gender:"M"},
+    {id:"allie", name:"Allie", gender:"F"},
+    {id:"maiya", name:"Maiya", gender:"F"},
+    {id:"rizz", name:"Rizz", gender:"M"},
+    {id:"laci", name:"Laci", gender:"F"},
+    {id:"brody", name:"Brody", gender:"M"},
+    {id:"joel", name:"Joel", gender:"M"},
+    {id:"jj-wallen", name:"JJ Wallen", gender:"M"},
+    {id:"mia", name:"Mia", gender:"F"},
+    {id:"maelen", name:"Maelen", gender:"F"}
+  ];
+  var INITIAL_RANK = ROSTER_SEED.map(function(p){ return p.id; });
+
+  var WEEK1_COURTS = {
+    1:{teamA:["ben","mikey"], teamB:["charlie","sienna"], scoreA:null, scoreB:null},
+    2:{teamA:["bradon","andrew"], teamB:["jj-lebo","cole"], scoreA:null, scoreB:null},
+    3:{teamA:["hamza","caeden"], teamB:["matthew","dice"], scoreA:null, scoreB:null},
+    4:{teamA:["titus","nathan"], teamB:["luke","jason-rice"], scoreA:null, scoreB:null},
+    5:{teamA:["isaac","analise"], teamB:["tony","andrew-loughan"], scoreA:null, scoreB:null},
+    6:{teamA:["allie","maiya"], teamB:["rizz","laci"], scoreA:null, scoreB:null}
+  };
+  var WEEK1_BENCH = ["brody","joel","jj-wallen","mia","maelen"];
+
+  var App = {
+    db: null,
+    view: "live",
+    roster: [],
+    meta: null,
+    week: null,
+    weekHistory: [],
+    unsubWeek: null,
+    detailPlayer: null,
+    sortCol: "winPct",
+    sortDir: "desc"
+  };
+
+  function byId(id){ return document.getElementById(id); }
+  function nameOf(id){
+    var p = App.roster.find(function(r){ return r.id===id; });
+    return p ? p.name : id;
+  }
+  function genderOf(id){
+    var p = App.roster.find(function(r){ return r.id===id; });
+    return p ? p.gender : "";
+  }
+  function shuffle(arr){
+    var a = arr.slice();
+    for(var i=a.length-1;i>0;i--){
+      var j = Math.floor(Math.random()*(i+1));
+      var t=a[i]; a[i]=a[j]; a[j]=t;
+    }
+    return a;
+  }
+  function teammateMapOf(courts){
+    var m = {};
+    Object.keys(courts).forEach(function(c){
+      var court = courts[c];
+      if(!court) return;
+      var a = court.teamA, b = court.teamB;
+      if(a && a.length===2){ m[a[0]]=a[1]; m[a[1]]=a[0]; }
+      if(b && b.length===2){ m[b[0]]=b[1]; m[b[1]]=b[0]; }
+    });
+    return m;
+  }
+  function pairUp(arrivals, teammateMap){
+    if(arrivals.length < 4){
+      return {teamA:arrivals.slice(0,2), teamB:arrivals.slice(2,4)};
+    }
+    var best = null;
+    for(var attempt=0; attempt<20; attempt++){
+      var s = shuffle(arrivals);
+      var teamA = [s[0],s[1]], teamB=[s[2],s[3]];
+      var repeats = (teammateMap[teamA[0]]===teamA[1]) || (teammateMap[teamB[0]]===teamB[1]);
+      if(!repeats) return {teamA:teamA, teamB:teamB};
+      best = {teamA:teamA, teamB:teamB};
+    }
+    return best;
+  }
+  function winnerLoser(court){
+    if(court.scoreA==null || court.scoreB==null) return null;
+    if(court.scoreA > court.scoreB) return {winner:court.teamA, loser:court.teamB};
+    if(court.scoreB > court.scoreA) return {winner:court.teamB, loser:court.teamA};
+    return null;
+  }
+  function seedGroupOf4(ids){
+    // balanced seed: best+worst vs middle two
+    return {teamA:[ids[0], ids[3]].filter(Boolean), teamB:[ids[1], ids[2]].filter(Boolean)};
+  }
+
+  function computeNextRound(prevCourts, mode, benchQueueIn){
+    var res = {};
+    for(var c=1;c<=6;c++){ res[c] = winnerLoser(prevCourts[c]); }
+    var arrivals = {1:[],2:[],3:[],4:[],5:[],6:[]};
+    arrivals[1] = res[1].winner.concat(res[2].winner);
+    arrivals[2] = res[1].loser.concat(res[3].winner);
+    arrivals[3] = res[2].loser.concat(res[4].winner);
+    arrivals[4] = res[3].loser.concat(res[5].winner);
+    var newBenchQueue;
+    if(mode==="bench"){
+      arrivals[5] = res[4].loser.concat(res[6].winner);
+      arrivals[6] = benchQueueIn.slice(0,4);
+      newBenchQueue = benchQueueIn.slice(4).concat(res[5].loser, res[6].loser);
+    } else {
+      arrivals[5] = res[4].loser.concat(res[6].winner);
+      arrivals[6] = res[5].loser.concat(res[6].loser);
+      newBenchQueue = benchQueueIn || [];
+    }
+    var teammateMap = teammateMapOf(prevCourts);
+    var newCourts = {};
+    for(var cc=1; cc<=6; cc++){
+      var pr = pairUp(arrivals[cc], teammateMap);
+      newCourts[cc] = {teamA:pr.teamA, teamB:pr.teamB, scoreA:null, scoreB:null};
+    }
+    return {courts:newCourts, benchQueue:newBenchQueue};
+  }
+
+  // ---------- DB ----------
+  function weekDocPath(id){ return "weeks/" + id; }
+
+  function seedIfNeeded(db){
+    return db.collection("roster").get().then(function(snap){
+      if(snap.empty){
+        var writes = ROSTER_SEED.map(function(p){
+          return db.collection("roster").doc(p.id).set({name:p.name, gender:p.gender});
+        });
+        return Promise.all(writes);
+      }
+    }).then(function(){
+      return db.doc("meta/state").get();
+    }).then(function(metaSnap){
+      if(!metaSnap.exists){
+        return db.doc("weeks/week-1").set({
+          number:1, label:"Week 1", mode:"bench",
+          confirmed: INITIAL_RANK.slice(0,24),
+          finalized:false, finalSeeding:null,
+          rounds:[{
+            index:0,
+            courts: WEEK1_COURTS,
+            benchSnapshot: WEEK1_BENCH,
+            benchQueueBefore: []
+          }],
+          benchQueue: WEEK1_BENCH
+        }).then(function(){
+          return db.doc("meta/state").set({
+            activeWeekId:"week-1",
+            nextWeekNumber:2,
+            rankOrder: INITIAL_RANK,
+            signup:{ weekNumber:2, entries:[] }
+          });
+        });
+      }
+    });
+  }
+
+  function subscribeWeek(id){
+    if(App.unsubWeek) App.unsubWeek();
+    App.unsubWeek = App.db.doc(weekDocPath(id)).onSnapshot(function(snap){
+      App.week = snap.exists ? Object.assign({id:snap.id}, snap.data()) : null;
+      render();
+    });
+  }
+
+  function init(){
+    if(!window.claude || !window.claude.use){ boot(null); return; }
+    window.claude.use("db").then(function(db){ boot(db); }).catch(function(){ boot(null); });
+  }
+
+  function boot(db){
+    App.db = db;
+    if(!db){
+      byId("app").innerHTML = '<div class="panel panel-pad empty">This view can\'t reach live storage right now, so scores can\'t be saved from here. Reopen the published page to try again.</div>';
+      return;
+    }
+    seedIfNeeded(db).then(function(){
+      db.collection("roster").onSnapshot(function(snap){
+        App.roster = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+        render();
+      });
+      db.doc("meta/state").onSnapshot(function(snap){
+        App.meta = snap.exists ? snap.data() : null;
+        if(App.meta && App.meta.activeWeekId) subscribeWeek(App.meta.activeWeekId);
+        render();
+      });
+      db.collection("weeks").orderBy("number","desc").limit(60).onSnapshot(function(snap){
+        App.weekHistory = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+        render();
+      });
+    });
+  }
+
+  // ---------- stats engine ----------
+  function computeStats(){
+    var players = {};
+    App.roster.forEach(function(p){
+      players[p.id] = {
+        id:p.id, name:p.name, gender:p.gender,
+        gw:0, gl:0, pf:0, pa:0, sessions:{},
+        partners:{}, opponents:{}
+      };
+    });
+    function ensure(id){
+      if(!players[id]) players[id] = {id:id,name:nameOf(id),gender:genderOf(id),gw:0,gl:0,pf:0,pa:0,sessions:{},partners:{},opponents:{}};
+      return players[id];
+    }
+    App.weekHistory.forEach(function(wk){
+      (wk.rounds||[]).forEach(function(round){
+        Object.keys(round.courts||{}).forEach(function(cnum){
+          var court = round.courts[cnum];
+          if(court.scoreA==null || court.scoreB==null) return;
+          var teams = [
+            {ids:court.teamA, score:court.scoreA, opp:court.scoreB},
+            {ids:court.teamB, score:court.scoreB, opp:court.scoreA}
+          ];
+          var won = court.scoreA > court.scoreB ? court.teamA : court.teamB;
+          teams.forEach(function(t){
+            if(!t.ids || t.ids.length<2) return;
+            var isWin = t.score > t.opp;
+            var otherTeam = (t.ids===court.teamA)? court.teamB : court.teamA;
+            t.ids.forEach(function(pid, idx){
+              var pl = ensure(pid);
+              pl.sessions[wk.id] = true;
+              if(isWin){ pl.gw++; } else { pl.gl++; }
+              pl.pf += t.score; pl.pa += t.opp;
+              var partnerId = t.ids[1-idx];
+              if(partnerId){
+                if(!pl.partners[partnerId]) pl.partners[partnerId] = {w:0,l:0};
+                if(isWin) pl.partners[partnerId].w++; else pl.partners[partnerId].l++;
+              }
+              otherTeam.forEach(function(oppId){
+                if(!pl.opponents[oppId]) pl.opponents[oppId] = {w:0,l:0,pf:0,pa:0};
+                if(isWin) pl.opponents[oppId].w++; else pl.opponents[oppId].l++;
+                pl.opponents[oppId].pf += t.score;
+                pl.opponents[oppId].pa += t.opp;
+              });
+            });
+          });
+        });
+      });
+    });
+    var list = Object.keys(players).map(function(id){
+      var p = players[id];
+      var gp = p.gw + p.gl;
+      var sessions = Object.keys(p.sessions).length;
+      var bestPartner = null;
+      Object.keys(p.partners).forEach(function(pid){
+        var s = p.partners[pid];
+        var gpp = s.w+s.l;
+        if(gpp < 2) return;
+        var wp = s.w/gpp;
+        if(!bestPartner || wp > bestPartner.winPct || (wp===bestPartner.winPct && gpp>bestPartner.games)){
+          bestPartner = {id:pid, name:nameOf(pid), games:gpp, wins:s.w, winPct:wp};
+        }
+      });
+      return {
+        id:p.id, name:p.name, gender:p.gender,
+        gw:p.gw, gl:p.gl, gp:gp, diff:p.gw-p.gl,
+        winPct: gp? p.gw/gp : 0,
+        pf:p.pf, pa:p.pa, pdiff:p.pf-p.pa,
+        pwinPct: (p.pf+p.pa)? p.pf/(p.pf+p.pa) : 0,
+        sessions:sessions,
+        bestPartner:bestPartner,
+        partners:p.partners, opponents:p.opponents
+      };
+    });
+    return list;
+  }
+
+  function bestPairingsGlobal(stats){
+    var seen = {};
+    var pairs = [];
+    stats.forEach(function(p){
+      Object.keys(p.partners).forEach(function(pid){
+        var key = [p.id,pid].sort().join("|");
+        if(seen[key]) return; seen[key]=true;
+        var s = p.partners[pid];
+        var gp = s.w+s.l;
+        if(gp < 3) return;
+        pairs.push({a:p.id, b:pid, games:gp, wins:s.w, winPct:s.w/gp});
+      });
+    });
+    pairs.sort(function(a,b){ return b.winPct-a.winPct || b.games-a.games; });
+    return pairs.slice(0,5);
+  }
+
+  // ---------- rendering ----------
+  function render(){
+    byId("tabs").querySelectorAll("button").forEach(function(b){
+      b.classList.toggle("active", b.dataset.view===App.view);
+    });
+    if(!App.meta || !App.week){
+      byId("app").innerHTML = '<div class="panel panel-pad empty">Loading league data…</div>';
+      return;
+    }
+    if(App.view==="live") renderLive();
+    else if(App.view==="standings") renderStandings();
+    else if(App.view==="roster") renderRoster();
+    else if(App.view==="history") renderHistory();
+  }
+
+  function pct(n){ return (n*100).toFixed(0)+"%"; }
+  function pct1(n){ return (n*100).toFixed(1)+"%"; }
+
+  function renderLive(){
+    var week = App.week;
+    var round = week.rounds[week.rounds.length-1];
+    var isLast = true;
+    var mode = week.mode;
+    var html = "";
+
+    html += '<div class="stack">';
+    if(mode==="bench"){
+      html += '<div class="banner"><span>🧭</span><span><b>Bench mode active.</b> Losers on Court 5 and Court 6 go straight to the bench &mdash; the winner of Court 6 slides up to Court 5, so Court 6 empties out and refills from the front of the bench queue. Win twice in a row from Court 6 to reach Court 4 and be safe.</span></div>';
+    }
+
+    html += '<div class="panel panel-pad">';
+    html += '<div class="round-head"><div><div class="display">'+week.label+'</div><div class="meta">Round '+(round.index+1)+' &middot; '+(mode==="bench" ? "Bench mode" : "Full 24")+'</div></div>';
+    if(!week.finalized){
+      html += '<button class="btn ghost small" id="btnFinalize">Finalize week</button>';
+    } else {
+      html += '<span class="pill confirmed">Finalized</span>';
+    }
+    html += '</div></div>';
+
+    html += '<div class="ladder">';
+    for(var c=1;c<=6;c++){
+      var court = round.courts[c];
+      var zone = (mode==="bench" && (c===5||c===6));
+      var wl = winnerLoser(court);
+      html += '<div class="court-card'+(zone?' zone':'')+'" data-court="'+c+'">';
+      html += '<div class="court-card-head"><div class="court-num"><span class="num">'+c+'</span><span class="lbl">Court</span></div>';
+      if(zone) html += '<span class="zone-chip">Loser sits</span>';
+      html += '</div>';
+      ["teamA","teamB"].forEach(function(key){
+        var team = court[key];
+        var won = wl && wl.winner===team;
+        html += '<div class="team-row'+(won?' won':'')+'">';
+        html += '<div class="team-names">'+team.map(nameOf).join(' <span class="amp">&amp;</span> ')+'</div>';
+        html += '<input class="score-input" type="number" min="0" inputmode="numeric" data-court="'+c+'" data-side="'+key+'" value="'+(court[key.replace('team','score')]==null? '': court[key.replace('team','score')])+'" '+(week.finalized?'disabled':'')+'>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    if(mode==="bench"){
+      html += '<div class="bench-strip"><h3>Bench queue</h3><div class="bench-names">';
+      week.benchQueue.forEach(function(id,i){
+        html += '<span class="bench-pill"><span class="pos">'+(i+1)+'</span>'+nameOf(id)+'</span>';
+      });
+      html += '</div></div>';
+    }
+
+    if(!week.finalized){
+      html += '<div class="actions">';
+      if(week.rounds.length>1 && !hasAnyScore(round)){
+        html += '<button class="btn ghost" id="btnReopen">Reopen previous round</button>';
+      }
+      html += '<button class="btn accent" id="btnComplete" disabled>Complete round &amp; rotate</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    byId("app").innerHTML = html;
+    wireLive(round, week);
+  }
+
+  function hasAnyScore(round){
+    return Object.keys(round.courts).some(function(c){
+      var court = round.courts[c];
+      return court.scoreA!=null || court.scoreB!=null;
+    });
+  }
+
+  function allScoresValid(round){
+    for(var c=1;c<=6;c++){
+      var court = round.courts[c];
+      if(court.scoreA==null || court.scoreB==null) return false;
+      if(court.scoreA===court.scoreB) return false;
+    }
+    return true;
+  }
+
+  function wireLive(round, week){
+    document.querySelectorAll(".score-input").forEach(function(inp){
+      inp.addEventListener("input", function(){
+        var c = this.dataset.court, side = this.dataset.side;
+        var field = side==="teamA" ? "scoreA" : "scoreB";
+        var v = this.value==="" ? null : parseInt(this.value,10);
+        round.courts[c][field] = (v==null || isNaN(v)) ? null : v;
+        var completeBtn = byId("btnComplete");
+        if(completeBtn) completeBtn.disabled = !allScoresValid(round);
+        // live highlight without full re-render to keep focus
+        var card = document.querySelector('.court-card[data-court="'+c+'"]');
+        var court = round.courts[c];
+        var wl = winnerLoser(court);
+        card.querySelectorAll(".team-row").forEach(function(row, idx){
+          var key = idx===0 ? "teamA" : "teamB";
+          row.classList.toggle("won", !!(wl && wl.winner===court[key]));
+        });
+      });
+    });
+    var completeBtn = byId("btnComplete");
+    if(completeBtn){
+      completeBtn.disabled = !allScoresValid(round);
+      completeBtn.addEventListener("click", function(){
+        var next = computeNextRound(round.courts, week.mode, week.benchQueue||[]);
+        var newRound = {
+          index: round.index+1,
+          courts: next.courts,
+          benchSnapshot: next.benchQueue,
+          benchQueueBefore: week.benchQueue||[]
+        };
+        var rounds = week.rounds.concat([newRound]);
+        App.db.doc(weekDocPath(week.id)).update({
+          rounds: rounds,
+          benchQueue: next.benchQueue
+        });
+      });
+    }
+    var reopenBtn = byId("btnReopen");
+    if(reopenBtn){
+      reopenBtn.addEventListener("click", function(){
+        var rounds = week.rounds.slice(0, week.rounds.length-1);
+        var prevBench = round.benchQueueBefore || [];
+        App.db.doc(weekDocPath(week.id)).update({
+          rounds: rounds,
+          benchQueue: prevBench
+        });
+      });
+    }
+    var finBtn = byId("btnFinalize");
+    if(finBtn){
+      finBtn.addEventListener("click", function(){
+        if(!confirm("Finalize "+week.label+"? This locks in the current round's court order as next week's seeding.")) return;
+        var seeding = [];
+        for(var c=1;c<=6;c++){ seeding.push(round.courts[c].teamA[0],round.courts[c].teamA[1],round.courts[c].teamB[0],round.courts[c].teamB[1]); }
+        seeding = seeding.concat(week.benchQueue||[]);
+        var newRank = seeding.concat((App.meta.rankOrder||[]).filter(function(id){ return seeding.indexOf(id)===-1; }));
+        App.db.doc(weekDocPath(week.id)).update({finalized:true, finalSeeding:seeding}).then(function(){
+          return App.db.doc("meta/state").update({rankOrder:newRank});
+        });
+      });
+    }
+  }
+
+  function renderStandings(){
+    var stats = computeStats();
+    var col = App.sortCol, dir = App.sortDir;
+    stats.sort(function(a,b){
+      var av=a[col], bv=b[col];
+      if(typeof av==="string") return dir==="asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return dir==="asc" ? av-bv : bv-av;
+    });
+    var globalBest = bestPairingsGlobal(stats);
+
+    var html = '<div class="stack">';
+    html += '<div class="panel panel-pad"><div class="section-title">Top pairings this season</div>';
+    if(globalBest.length===0){
+      html += '<div class="empty">Need a few more games together before pairings settle out.</div>';
+    } else {
+      html += '<div class="stat-hero">';
+      globalBest.forEach(function(p){
+        html += '<div class="cell"><div class="v">'+pct(p.winPct)+'</div><div class="l">'+nameOf(p.a)+' &amp; '+nameOf(p.b)+' &middot; '+p.games+'g</div></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="panel"><div class="table-wrap"><table><thead><tr>';
+    var cols = [
+      ["name","Player"],["sessions","Sessions"],["gw","W"],["gl","L"],["diff","Diff"],
+      ["winPct","Win%"],["pf","Pts For"],["pa","Pts Ag"],["pdiff","Pt Diff"],["pwinPct","Pt%"]
+    ];
+    cols.forEach(function(c){
+      html += '<th data-col="'+c[0]+'" class="'+(col===c[0]?'sorted':'')+'">'+c[1]+(col===c[0]?(dir==="asc"?" ↑":" ↓"):'')+'</th>';
+    });
+    html += '<th>Best partner</th></tr></thead><tbody>';
+    stats.forEach(function(p){
+      html += '<tr data-player="'+p.id+'">';
+      html += '<td>'+p.name+'</td>';
+      html += '<td class="num">'+p.sessions+'</td>';
+      html += '<td class="num">'+p.gw+'</td>';
+      html += '<td class="num">'+p.gl+'</td>';
+      html += '<td class="num">'+(p.diff>0?'+':'')+p.diff+'</td>';
+      html += '<td class="num">'+pct(p.winPct)+'</td>';
+      html += '<td class="num">'+p.pf+'</td>';
+      html += '<td class="num">'+p.pa+'</td>';
+      html += '<td class="num">'+(p.pdiff>0?'+':'')+p.pdiff+'</td>';
+      html += '<td class="num">'+pct(p.pwinPct)+'</td>';
+      html += '<td>'+(p.bestPartner? p.bestPartner.name+' <span class="mono" style="color:var(--ink-faint);font-size:11.5px">'+pct(p.bestPartner.winPct)+'</span>' : '&mdash;')+'</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+
+    if(App.detailPlayer){
+      var p = stats.find(function(s){ return s.id===App.detailPlayer; });
+      if(p){
+        html += '<div class="panel panel-pad"><button class="btn ghost small detail-close" id="closeDetail">Close</button>';
+        html += '<div class="section-title">Head-to-head &middot; '+p.name+'</div>';
+        var opps = Object.keys(p.opponents).map(function(oid){
+          var o = p.opponents[oid]; var gp=o.w+o.l;
+          return {id:oid, name:nameOf(oid), w:o.w, l:o.l, gp:gp, pf:o.pf, pa:o.pa};
+        }).sort(function(a,b){ return b.gp-a.gp; });
+        if(opps.length===0){ html += '<div class="empty">No games logged yet.</div>'; }
+        else {
+          html += '<div class="table-wrap"><table><thead><tr><th>Opponent</th><th class="num">W</th><th class="num">L</th><th class="num">Pts</th></tr></thead><tbody>';
+          opps.forEach(function(o){
+            html += '<tr><td>'+o.name+'</td><td class="num">'+o.w+'</td><td class="num">'+o.l+'</td><td class="num">'+o.pf+'-'+o.pa+'</td></tr>';
+          });
+          html += '</tbody></table></div>';
+        }
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+    byId("app").innerHTML = html;
+
+    document.querySelectorAll("th[data-col]").forEach(function(th){
+      th.addEventListener("click", function(){
+        var c = this.dataset.col;
+        if(App.sortCol===c) App.sortDir = App.sortDir==="asc"?"desc":"asc";
+        else { App.sortCol=c; App.sortDir = c==="name"?"asc":"desc"; }
+        render();
+      });
+    });
+    document.querySelectorAll("tr[data-player]").forEach(function(tr){
+      tr.addEventListener("click", function(){
+        App.detailPlayer = this.dataset.player;
+        render();
+      });
+    });
+    var closeBtn = byId("closeDetail");
+    if(closeBtn) closeBtn.addEventListener("click", function(){ App.detailPlayer=null; render(); });
+  }
+
+  function renderRoster(){
+    var meta = App.meta;
+    var entries = (meta.signup && meta.signup.entries) || [];
+    var sorted = entries.slice().sort(function(a,b){ return a.ts-b.ts; });
+    var confirmedIds = sorted.slice(0,24).map(function(e){ return e.id; });
+    var waitlistIds = sorted.slice(24).map(function(e){ return e.id; });
+    var rankOrder = meta.rankOrder || INITIAL_RANK;
+
+    var html = '<div class="stack">';
+    html += '<div class="panel panel-pad"><div class="section-title">Sign-up &mdash; '+ 'Week '+meta.signup.weekNumber+'</div>';
+    html += '<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">First 24 to sign up play. Extra names land on the waitlist and move up automatically if someone drops.</div>';
+    html += '<div class="stat-hero"><div class="cell"><div class="v">'+confirmedIds.length+'/24</div><div class="l">Confirmed</div></div><div class="cell"><div class="v">'+waitlistIds.length+'</div><div class="l">Waitlist</div></div></div>';
+    html += '<div class="actions" style="margin-top:12px;"><button class="btn accent" id="btnStartWeek" '+(confirmedIds.length===0?'disabled':'')+'>Start week '+meta.signup.weekNumber+'</button></div>';
+    html += '</div>';
+
+    html += '<div class="panel"><div class="section-title" style="padding:14px 16px 0;">Full roster &middot; ranked order</div>';
+    rankOrder.forEach(function(id, idx){
+      var entry = entries.find(function(e){ return e.id===id; });
+      var isConfirmed = confirmedIds.indexOf(id)>-1;
+      var isWaitlist = waitlistIds.indexOf(id)>-1;
+      html += '<div class="roster-row">';
+      html += '<span class="rank-pill">'+(idx+1)+'</span>';
+      html += '<span class="name">'+nameOf(id)+'<span class="g">'+genderOf(id)+'</span></span>';
+      if(isConfirmed) html += '<span class="pill confirmed">In &middot; #'+(confirmedIds.indexOf(id)+1)+'</span>';
+      else if(isWaitlist) html += '<span class="pill waitlist">Wait &middot; #'+(waitlistIds.indexOf(id)+1)+'</span>';
+      html += '<div class="rowbtns">';
+      html += '<button class="iconbtn" data-rank-up="'+id+'" title="Move up rank">&uarr;</button>';
+      html += '<button class="iconbtn" data-rank-down="'+id+'" title="Move down rank">&darr;</button>';
+      if(entry) html += '<button class="iconbtn" data-dropout="'+id+'" title="Remove from signup">&times;</button>';
+      else html += '<button class="iconbtn" data-signup="'+id+'" title="Sign up">+</button>';
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+    byId("app").innerHTML = html;
+
+    document.querySelectorAll("[data-signup]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var id = this.dataset.signup;
+        var newEntries = entries.concat([{id:id, ts:Date.now()}]);
+        App.db.doc("meta/state").update({"signup.entries":newEntries});
+      });
+    });
+    document.querySelectorAll("[data-dropout]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var id = this.dataset.dropout;
+        var newEntries = entries.filter(function(e){ return e.id!==id; });
+        App.db.doc("meta/state").update({"signup.entries":newEntries});
+      });
+    });
+    document.querySelectorAll("[data-rank-up]").forEach(function(b){
+      b.addEventListener("click", function(){ moveRank(this.dataset.rankUp, -1); });
+    });
+    document.querySelectorAll("[data-rank-down]").forEach(function(b){
+      b.addEventListener("click", function(){ moveRank(this.dataset.rankDown, 1); });
+    });
+    var startBtn = byId("btnStartWeek");
+    if(startBtn) startBtn.addEventListener("click", function(){ startNewWeek(confirmedIds, meta.signup.weekNumber); });
+  }
+
+  function moveRank(id, dir){
+    var order = (App.meta.rankOrder||INITIAL_RANK).slice();
+    var i = order.indexOf(id);
+    var j = i+dir;
+    if(i<0 || j<0 || j>=order.length) return;
+    var t = order[i]; order[i]=order[j]; order[j]=t;
+    App.db.doc("meta/state").update({rankOrder:order});
+  }
+
+  function startNewWeek(confirmedIds, weekNumber){
+    var ordered = (App.meta.rankOrder||INITIAL_RANK).filter(function(id){ return confirmedIds.indexOf(id)>-1; });
+    var fullCourts = Math.floor(ordered.length/4);
+    var courts = {};
+    var teammateMap = {};
+    for(var c=1;c<=6;c++){
+      if(c<=fullCourts){
+        var group = ordered.slice((c-1)*4, c*4);
+        var pr = seedGroupOf4(group);
+        courts[c] = {teamA:pr.teamA, teamB:pr.teamB, scoreA:null, scoreB:null};
+      } else {
+        courts[c] = {teamA:["",""], teamB:["",""], scoreA:null, scoreB:null};
+      }
+    }
+    var bench = ordered.slice(fullCourts*4);
+    var mode = bench.length>0 ? "bench" : "full";
+    var id = "week-"+weekNumber;
+    App.db.doc(weekDocPath(id)).set({
+      number:weekNumber, label:"Week "+weekNumber, mode:mode,
+      confirmed:confirmedIds, finalized:false, finalSeeding:null,
+      rounds:[{index:0, courts:courts, benchSnapshot:bench, benchQueueBefore:[]}],
+      benchQueue:bench
+    }).then(function(){
+      return App.db.doc("meta/state").update({
+        activeWeekId:id,
+        nextWeekNumber:weekNumber+1,
+        signup:{weekNumber:weekNumber+1, entries:[]}
+      });
+    });
+  }
+
+  function renderHistory(){
+    var html = '<div class="stack">';
+    if(App.weekHistory.length===0){ html += '<div class="panel panel-pad empty">No completed weeks yet.</div>'; }
+    App.weekHistory.forEach(function(wk){
+      html += '<div class="panel week-card" data-week="'+wk.id+'">';
+      html += '<div class="week-card-head"><div><div class="display" style="font-size:18px;color:var(--court);">'+wk.label+'</div><div class="meta" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">'+(wk.mode==="bench"?"Bench mode":"Full 24")+' &middot; '+(wk.rounds?wk.rounds.length:0)+' rounds'+(wk.finalized?' &middot; Finalized':'')+'</div></div></div>';
+      if(wk.finalSeeding){
+        html += '<div class="week-seed">';
+        for(var c=1;c<=6;c++){
+          var g = wk.finalSeeding.slice((c-1)*4,c*4).filter(Boolean);
+          if(g.length===0) continue;
+          html += '<div class="c"><b>Court '+c+'</b>'+g.map(nameOf).join(", ")+'</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    byId("app").innerHTML = html;
+  }
+
+  byId("tabs").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-view]");
+    if(!b) return;
+    App.view = b.dataset.view;
+    App.detailPlayer = null;
+    render();
+  });
+
+  init();
+})();
+</script>
