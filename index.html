@@ -712,13 +712,21 @@
       completeBtn.addEventListener("click", function(){
         var courts = mergedCourts(round);
         var next = computeNextRound(courts, week.mode, week.benchQueue||[]);
+        // Persist THIS round's actual scores (they only ever lived in the
+        // local draft until now) before appending the freshly-rotated one.
+        var completedRound = {
+          index: round.index,
+          courts: courts,
+          benchSnapshot: round.benchSnapshot,
+          benchQueueBefore: round.benchQueueBefore
+        };
         var newRound = {
           index: round.index+1,
           courts: next.courts,
           benchSnapshot: next.benchQueue,
           benchQueueBefore: week.benchQueue||[]
         };
-        var rounds = week.rounds.concat([newRound]);
+        var rounds = week.rounds.slice(0, week.rounds.length-1).concat([completedRound, newRound]);
         App.db.doc(weekDocPath(week.id)).update({
           rounds: rounds,
           benchQueue: next.benchQueue
