@@ -277,7 +277,9 @@
     unsubWeek: null,
     detailPlayer: null,
     sortCol: "winPct",
-    sortDir: "desc"
+    sortDir: "desc",
+    draft: {},
+    draftKey: null
   };
 
   function byId(id){ return document.getElementById(id); }
@@ -321,6 +323,24 @@
       best = {teamA:teamA, teamB:teamB};
     }
     return best;
+  }
+  // Snapshot data from the db is frozen and must never be mutated in place.
+  // In-progress score entry lives in App.draft (plain, mutable, local-only)
+  // and is merged over the persisted court data purely for reading/display.
+  function courtView(round, c){
+    var base = round.courts[c];
+    var d = App.draft[c];
+    return {
+      teamA: base.teamA,
+      teamB: base.teamB,
+      scoreA: (d && d.scoreA!==undefined) ? d.scoreA : base.scoreA,
+      scoreB: (d && d.scoreB!==undefined) ? d.scoreB : base.scoreB
+    };
+  }
+  function mergedCourts(round){
+    var m = {};
+    for(var c=1;c<=6;c++){ m[c] = courtView(round,c); }
+    return m;
   }
   function winnerLoser(court){
     if(court.scoreA==null || court.scoreB==null) return null;
@@ -553,6 +573,12 @@
     var mode = week.mode;
     var html = "";
 
+    var roundKey = week.id + ":" + round.index;
+    if(App.draftKey !== roundKey){
+      App.draft = {};
+      App.draftKey = roundKey;
+    }
+
     html += '<div class="stack">';
     if(mode==="bench"){
       html += '<div class="banner"><span>🧭</span><span><b>Bench mode active.</b> Losers on Court 5 and Court 6 go straight to the bench &mdash; the winner of Court 6 slides up to Court 5, so Court 6 empties out and refills from the front of the bench queue. Win twice in a row from Court 6 to reach Court 4 and be safe.</span></div>';
@@ -569,7 +595,7 @@
 
     html += '<div class="ladder">';
     for(var c=1;c<=6;c++){
-      var court = round.courts[c];
+      var court = courtView(round, c);
       var zone = (mode==="bench" && (c===5||c===6));
       var wl = winnerLoser(court);
       html += '<div class="court-card'+(zone?' zone':'')+'" data-court="'+c+'">';
@@ -612,9 +638,9 @@
   }
 
   function hasAnyScore(round){
-    return Object.keys(round.courts).some(function(c){
-      var court = round.courts[c];
-      return court.scoreA!=null || court.scoreB!=null;
+    var m = mergedCourts(round);
+    return Object.keys(m).some(function(c){
+      return m[c].scoreA!=null || m[c].scoreB!=null;
     });
   }
 
@@ -623,9 +649,10 @@
   }
 
   function missingCourts(round){
+    var m = mergedCourts(round);
     var missing = [];
     for(var c=1;c<=6;c++){
-      var court = round.courts[c];
+      var court = m[c];
       if(court.scoreA==null || court.scoreB==null) missing.push(c+" (needs both scores)");
       else if(court.scoreA===court.scoreB) missing.push(c+" (scores can't tie)");
     }
@@ -648,13 +675,14 @@
         var c = this.dataset.court, side = this.dataset.side;
         var field = side==="teamA" ? "scoreA" : "scoreB";
         var v = this.value==="" ? null : parseInt(this.value,10);
-        round.courts[c][field] = (v==null || isNaN(v)) ? null : v;
+        App.draft[c] = App.draft[c] || {};
+        App.draft[c][field] = (v==null || isNaN(v)) ? null : v;
         var completeBtn = byId("btnComplete");
         if(completeBtn) completeBtn.disabled = !allScoresValid(round);
         refreshRoundStatus(round);
         // live highlight without full re-render to keep focus
         var card = document.querySelector('.court-card[data-court="'+c+'"]');
-        var court = round.courts[c];
+        var court = courtView(round, c);
         var wl = winnerLoser(court);
         card.querySelectorAll(".team-row").forEach(function(row, idx){
           var key = idx===0 ? "teamA" : "teamB";
@@ -669,7 +697,8 @@
       completeBtn.disabled = !allScoresValid(round);
       refreshRoundStatus(round);
       completeBtn.addEventListener("click", function(){
-        var next = computeNextRound(round.courts, week.mode, week.benchQueue||[]);
+        var courts = mergedCourts(round);
+        var next = computeNextRound(courts, week.mode, week.benchQueue||[]);
         var newRound = {
           index: round.index+1,
           courts: next.courts,
@@ -680,6 +709,8 @@
         App.db.doc(weekDocPath(week.id)).update({
           rounds: rounds,
           benchQueue: next.benchQueue
+        }).then(function(){
+          App.draft = {};
         });
       });
     }
@@ -688,6 +719,7 @@
       reopenBtn.addEventListener("click", function(){
         var rounds = week.rounds.slice(0, week.rounds.length-1);
         var prevBench = round.benchQueueBefore || [];
+        App.draft = {};
         App.db.doc(weekDocPath(week.id)).update({
           rounds: rounds,
           benchQueue: prevBench
