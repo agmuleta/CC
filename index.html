@@ -281,7 +281,8 @@
     sortCol: "winPct",
     sortDir: "desc",
     draft: {},
-    draftKey: null
+    draftKey: null,
+    confirmFinalize: false
   };
 
   function byId(id){ return document.getElementById(id); }
@@ -589,7 +590,15 @@
     html += '<div class="panel panel-pad">';
     html += '<div class="round-head"><div><div class="display">'+week.label+'</div><div class="meta">Round '+(round.index+1)+' &middot; '+(mode==="bench" ? "Bench mode" : "Full 24")+'</div></div>';
     if(!week.finalized){
-      html += '<button class="btn ghost small" id="btnFinalize">Finalize week</button>';
+      if(App.confirmFinalize){
+        html += '<div style="display:flex;align-items:center;gap:8px;">'
+          + '<span style="font-size:12px;color:var(--bench);max-width:220px;">Lock in the current court order as next week\'s seeding?</span>'
+          + '<button class="btn danger small" id="btnFinalizeYes">Yes, finalize</button>'
+          + '<button class="btn ghost small" id="btnFinalizeNo">Cancel</button>'
+          + '</div>';
+      } else {
+        html += '<button class="btn ghost small" id="btnFinalize">Finalize week</button>';
+      }
     } else {
       html += '<span class="pill confirmed">Finalized</span>';
     }
@@ -733,13 +742,31 @@
     var finBtn = byId("btnFinalize");
     if(finBtn){
       finBtn.addEventListener("click", function(){
-        if(!confirm("Finalize "+week.label+"? This locks in the current round's court order as next week's seeding.")) return;
+        App.confirmFinalize = true;
+        render();
+      });
+    }
+    var finNo = byId("btnFinalizeNo");
+    if(finNo){
+      finNo.addEventListener("click", function(){
+        App.confirmFinalize = false;
+        render();
+      });
+    }
+    var finYes = byId("btnFinalizeYes");
+    if(finYes){
+      finYes.addEventListener("click", function(){
+        finYes.disabled = true;
         var seeding = [];
         for(var c=1;c<=6;c++){ seeding.push(round.courts[c].teamA[0],round.courts[c].teamA[1],round.courts[c].teamB[0],round.courts[c].teamB[1]); }
         seeding = seeding.concat(week.benchQueue||[]);
         var newRank = seeding.concat((App.meta.rankOrder||[]).filter(function(id){ return seeding.indexOf(id)===-1; }));
         App.db.doc(weekDocPath(week.id)).update({finalized:true, finalSeeding:seeding}).then(function(){
           return App.db.doc("meta/state").update({rankOrder:newRank});
+        }).then(function(){
+          App.confirmFinalize = false;
+        }).catch(function(){
+          finYes.disabled = false;
         });
       });
     }
@@ -971,6 +998,7 @@
     if(!b) return;
     App.view = b.dataset.view;
     App.detailPlayer = null;
+    App.confirmFinalize = false;
     render();
   });
 
