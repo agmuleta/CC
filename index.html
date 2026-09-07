@@ -289,7 +289,9 @@
     confirmCourtAction: null,
     historyOpen: null,
     histEditRound: null,
-    histDraft: {}
+    histDraft: {},
+    recapWeekId: null,
+    recapReturnView: "roster"
   };
 
   function byId(id){ return document.getElementById(id); }
@@ -577,6 +579,101 @@
     return pairs.slice(0,5);
   }
 
+  // Week-scoped storyline stats for the post-session recap — deliberately
+  // separate from computeStats(), which is season-long.
+  function buildWeekRecap(week){
+    var rounds = week.rounds || [];
+    var games = [];
+    rounds.forEach(function(r, ri){
+      Object.keys(r.courts).forEach(function(cnum){
+        var ct = r.courts[cnum];
+        if(ct.scoreA==null || ct.scoreB==null) return;
+        var winnerIsA = ct.scoreA > ct.scoreB;
+        games.push({
+          round: ri+1, court: +cnum,
+          teamA: ct.teamA, teamB: ct.teamB, scoreA: ct.scoreA, scoreB: ct.scoreB,
+          winner: winnerIsA ? ct.teamA : ct.teamB,
+          loser: winnerIsA ? ct.teamB : ct.teamA,
+          margin: Math.abs(ct.scoreA - ct.scoreB)
+        });
+      });
+    });
+
+    var players = {};
+    function ensure(id){ if(!players[id]) players[id] = {id:id, gw:0, gl:0, partners:{}}; return players[id]; }
+    games.forEach(function(g){
+      [{ids:g.teamA, win:g.winner===g.teamA}, {ids:g.teamB, win:g.winner===g.teamB}].forEach(function(t){
+        t.ids.forEach(function(pid, idx){
+          if(!pid) return;
+          var pl = ensure(pid);
+          if(t.win) pl.gw++; else pl.gl++;
+          var partnerId = t.ids[1-idx];
+          if(partnerId){
+            pl.partners[partnerId] = pl.partners[partnerId] || {w:0,l:0};
+            if(t.win) pl.partners[partnerId].w++; else pl.partners[partnerId].l++;
+          }
+        });
+      });
+    });
+
+    var firstRound = rounds[0], lastRound = rounds[rounds.length-1];
+    var startCourt = {}, endCourt = {};
+    if(firstRound) Object.keys(firstRound.courts).forEach(function(cnum){
+      firstRound.courts[cnum].teamA.concat(firstRound.courts[cnum].teamB).forEach(function(pid){ if(pid) startCourt[pid] = +cnum; });
+    });
+    if(lastRound) Object.keys(lastRound.courts).forEach(function(cnum){
+      lastRound.courts[cnum].teamA.concat(lastRound.courts[cnum].teamB).forEach(function(pid){ if(pid) endCourt[pid] = +cnum; });
+    });
+    var movers = Object.keys(startCourt)
+      .filter(function(id){ return endCourt[id]!=null; })
+      .map(function(id){ return {id:id, start:startCourt[id], end:endCourt[id], delta:startCourt[id]-endCourt[id]}; });
+    movers.sort(function(a,b){ return b.delta-a.delta; });
+    var biggestRiser = (movers[0] && movers[0].delta>0) ? movers[0] : null;
+    var fallers = movers.slice().sort(function(a,b){ return a.delta-b.delta; });
+    var biggestFaller = (fallers[0] && fallers[0].delta<0) ? fallers[0] : null;
+
+    var byMargin = games.slice().sort(function(a,b){ return a.margin-b.margin; });
+    var closest = byMargin[0] || null;
+    var blowout = byMargin.length ? byMargin[byMargin.length-1] : null;
+
+    var totalRounds = rounds.length;
+    var perfect = Object.keys(players).filter(function(id){
+      var p = players[id]; var gp = p.gw+p.gl;
+      return gp>=2 && gp>=totalRounds && p.gl===0;
+    });
+
+    var seenPairs = {}, pairs = [];
+    Object.keys(players).forEach(function(id){
+      var p = players[id];
+      Object.keys(p.partners).forEach(function(pid){
+        var key = [id,pid].sort().join("|");
+        if(seenPairs[key]) return; seenPairs[key]=true;
+        var s = p.partners[pid]; var gp = s.w+s.l;
+        if(gp<2) return;
+        pairs.push({a:id, b:pid, games:gp, wins:s.w, winPct:s.w/gp});
+      });
+    });
+    pairs.sort(function(a,b){ return b.winPct-a.winPct || b.games-a.games; });
+
+    var court1 = lastRound && lastRound.courts["1"];
+    var topCourtWinner = null, topCourtBoth = [];
+    if(court1){
+      topCourtBoth = court1.teamA.concat(court1.teamB).filter(Boolean);
+      if(court1.scoreA!=null && court1.scoreB!=null && court1.scoreA!==court1.scoreB){
+        topCourtWinner = court1.scoreA>court1.scoreB ? court1.teamA : court1.teamB;
+      }
+    }
+    var totalPoints = games.reduce(function(s,g){ return s+g.scoreA+g.scoreB; }, 0);
+
+    return {
+      totalRounds: totalRounds, totalGames: games.length, totalPoints: totalPoints,
+      biggestRiser: biggestRiser, biggestFaller: biggestFaller,
+      closest: closest, blowout: blowout,
+      perfect: perfect, bestPair: pairs[0] || null,
+      topCourtWinner: topCourtWinner, topCourtBoth: topCourtBoth
+    };
+  }
+
   // ---------- rendering ----------
   function render(){
     byId("tabs").querySelectorAll("button").forEach(function(b){
@@ -590,6 +687,10 @@
     else if(App.view==="standings") renderStandings();
     else if(App.view==="roster") renderRoster();
     else if(App.view==="history") renderHistory();
+    else if(App.view==="recap"){
+      var recapWeek = App.weekHistory.find(function(w){ return w.id===App.recapWeekId; }) || App.week;
+      renderRecap(recapWeek);
+    }
   }
 
   function pct(n){ return (n*100).toFixed(0)+"%"; }
@@ -618,13 +719,13 @@
     html += '<div class="round-head"><div><div class="display">'+week.label+'</div><div class="meta">Round '+(round.index+1)+' &middot; '+(hasBench ? "Bench mode" : N+" court"+(N===1?'':'s')+" &middot; "+(N*4)+" players")+'</div></div>';
     if(!week.finalized){
       if(App.confirmFinalize){
-        html += '<div style="display:flex;align-items:center;gap:8px;">'
-          + '<span style="font-size:12px;color:var(--bench);max-width:220px;">Lock in the current court order as next week\'s seeding?</span>'
-          + '<button class="btn danger small" id="btnFinalizeYes">Yes, finalize</button>'
+        html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+          + '<span style="font-size:12px;color:var(--bench);max-width:260px;">Save today\'s scores, lock in next week\'s seeding, and show the recap?</span>'
+          + '<button class="btn danger small" id="btnFinalizeYes">Yes, complete week</button>'
           + '<button class="btn ghost small" id="btnFinalizeNo">Cancel</button>'
           + '</div>';
       } else {
-        html += '<button class="btn ghost small" id="btnFinalize">Finalize week</button>';
+        html += '<button class="btn accent small" id="btnFinalize">Complete week</button>';
       }
     } else if(App.confirmUnlock){
       html += '<div style="display:flex;align-items:center;gap:8px;">'
@@ -875,6 +976,10 @@
         }).then(function(){
           App.confirmFinalize = false;
           App.draft = {};
+          App.recapWeekId = week.id;
+          App.recapReturnView = "roster";
+          App.view = "recap";
+          render();
         }).catch(function(){
           finYes.disabled = false;
         });
@@ -959,6 +1064,80 @@
         }).catch(function(){ courtYes.disabled = false; });
       });
     }
+  }
+
+  function renderRecap(week){
+    var recap = buildWeekRecap(week);
+    var html = '<div class="stack">';
+
+    html += '<div class="panel panel-pad" style="text-align:center;background:var(--court);border-color:var(--court);">';
+    html += '<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:4px;">Session Recap</div>';
+    html += '<div class="display" style="font-size:32px;color:#fff;">'+week.label+'</div>';
+    html += '<div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:6px;">'+recap.totalRounds+' round'+(recap.totalRounds===1?'':'s')+' &middot; '+recap.totalGames+' games played &middot; '+recap.totalPoints+' points on the board</div>';
+    html += '</div>';
+
+    if(recap.topCourtBoth.length){
+      html += '<div class="panel panel-pad">';
+      html += '<div class="section-title">&#128081; Ruling Court 1</div>';
+      if(recap.topCourtWinner){
+        html += '<div style="font-size:16px;font-weight:700;margin-top:4px;">'+recap.topCourtWinner.map(nameOf).join(' & ')+'</div>';
+        html += '<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">Won Court 1\'s final game of the night &mdash; top of the ladder.</div>';
+      } else {
+        html += '<div style="font-size:16px;font-weight:700;margin-top:4px;">'+recap.topCourtBoth.map(nameOf).join(' & ')+'</div>';
+        html += '<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">Battling it out on Court 1 as the night wrapped up.</div>';
+      }
+      html += '</div>';
+    }
+
+    var stories = [];
+    if(recap.biggestRiser){
+      var rise = recap.biggestRiser;
+      stories.push({icon:'&#128640;', title:'Biggest climb', text: nameOf(rise.id)+' started the day on Court '+rise.start+' and finished on Court '+rise.end+' &mdash; a '+rise.delta+'-court climb.'});
+    }
+    if(recap.biggestFaller){
+      var fall = recap.biggestFaller;
+      stories.push({icon:'&#128202;', title:'Long way down', text: nameOf(fall.id)+' opened on Court '+fall.start+' and slid to Court '+fall.end+' by the last round.'});
+    }
+    if(recap.closest){
+      var c = recap.closest;
+      stories.push({icon:'&#128561;', title:'Nail-biter of the night', text: c.winner.map(nameOf).join(' & ')+' edged out '+c.loser.map(nameOf).join(' & ')+' '+Math.max(c.scoreA,c.scoreB)+'-'+Math.min(c.scoreA,c.scoreB)+' on Court '+c.court+' &mdash; the closest game of the day.'});
+    }
+    if(recap.blowout && recap.blowout!==recap.closest){
+      var b = recap.blowout;
+      stories.push({icon:'&#128165;', title:'Blowout of the night', text: b.winner.map(nameOf).join(' & ')+' ran over '+b.loser.map(nameOf).join(' & ')+' '+Math.max(b.scoreA,b.scoreB)+'-'+Math.min(b.scoreA,b.scoreB)+' on Court '+b.court+'.'});
+    }
+    if(recap.bestPair){
+      var p = recap.bestPair;
+      stories.push({icon:'&#129309;', title:'Dream team', text: nameOf(p.a)+' & '+nameOf(p.b)+' went '+p.wins+'-'+(p.games-p.wins)+' together &mdash; the best partnership on the courts today.'});
+    }
+    if(recap.perfect.length){
+      stories.push({icon:'&#128293;', title:'Undefeated', text: recap.perfect.map(nameOf).join(', ')+' didn\'t drop a single game all day.'});
+    }
+
+    if(stories.length){
+      html += '<div class="panel"><div class="section-title" style="padding:14px 16px 0;">The Storylines</div>';
+      stories.forEach(function(s, i){
+        html += '<div style="display:flex;gap:12px;padding:12px 16px;'+(i<stories.length-1?'border-bottom:1px solid var(--line);':'')+'">';
+        html += '<div style="font-size:22px;line-height:1;">'+s.icon+'</div>';
+        html += '<div><div style="font-weight:700;font-size:12px;color:var(--court);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">'+s.title+'</div><div style="font-size:14px;line-height:1.45;">'+s.text+'</div></div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="panel panel-pad empty">Not enough games logged this week for a storyline recap &mdash; but the scores are saved.</div>';
+    }
+
+    var continueLabel = App.recapReturnView==="history" ? "Back to history" : "Continue to sign-ups &rarr;";
+    html += '<div class="actions"><button class="btn accent" id="btnRecapContinue">'+continueLabel+'</button></div>';
+    html += '</div>';
+    byId("app").innerHTML = html;
+
+    var contBtn = byId("btnRecapContinue");
+    if(contBtn) contBtn.addEventListener("click", function(){
+      App.view = App.recapReturnView || "roster";
+      App.recapWeekId = null;
+      render();
+    });
   }
 
   function renderStandings(){
@@ -1232,7 +1411,7 @@
       var lastRound = wk.rounds && wk.rounds[wk.rounds.length-1];
       var lastN = lastRound ? courtCount(lastRound) : 0;
       var wasBench = (wk.benchQueue||[]).length>0;
-      html += '<div class="week-card-head" data-week-toggle="'+wk.id+'"><div><div class="display" style="font-size:18px;color:var(--court);">'+wk.label+'</div><div class="meta" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">'+(wasBench?"Bench mode":lastN+" court"+(lastN===1?'':'s'))+' &middot; '+(wk.rounds?wk.rounds.length:0)+' rounds'+(wk.finalized?' &middot; Finalized':' &middot; In progress')+'</div></div><span class="mono" style="color:var(--ink-faint);font-size:18px;">'+(open?'&minus;':'&plus;')+'</span></div>';
+      html += '<div class="week-card-head" data-week-toggle="'+wk.id+'"><div><div class="display" style="font-size:18px;color:var(--court);">'+wk.label+'</div><div class="meta" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">'+(wasBench?"Bench mode":lastN+" court"+(lastN===1?'':'s'))+' &middot; '+(wk.rounds?wk.rounds.length:0)+' rounds'+(wk.finalized?' &middot; Finalized':' &middot; In progress')+'</div></div><div style="display:flex;align-items:center;gap:10px;">'+(wk.finalized?'<button class="btn ghost small" data-view-recap="'+wk.id+'">&#127881; Recap</button>':'')+'<span class="mono" style="color:var(--ink-faint);font-size:18px;">'+(open?'&minus;':'&plus;')+'</span></div></div>';
 
       if(open){
         (wk.rounds||[]).forEach(function(round){
@@ -1310,6 +1489,15 @@
         render();
       });
     });
+    document.querySelectorAll("[data-view-recap]").forEach(function(el){
+      el.addEventListener("click", function(ev){
+        ev.stopPropagation();
+        App.recapWeekId = this.dataset.viewRecap;
+        App.recapReturnView = "history";
+        App.view = "recap";
+        render();
+      });
+    });
     document.querySelectorAll("[data-edit-round]").forEach(function(el){
       el.addEventListener("click", function(){
         App.histEditRound = parseInt(this.dataset.editRound,10);
@@ -1363,6 +1551,7 @@
     App.historyOpen = null;
     App.histEditRound = null;
     App.histDraft = {};
+    App.recapWeekId = null;
     render();
   });
 
