@@ -692,10 +692,21 @@
   function renderStandings(){
     var stats = computeStats();
     var col = App.sortCol, dir = App.sortDir;
+    // Record (win%, game differential, wins) always outranks points (point
+    // differential, point win%) as a tiebreaker, whichever column is sorted.
+    var RECORD_TIEBREAK = ["winPct","diff","gw","pdiff","pwinPct"];
+    function recordThenPoints(a,b){
+      for(var i=0;i<RECORD_TIEBREAK.length;i++){
+        var k = RECORD_TIEBREAK[i];
+        if(a[k]!==b[k]) return b[k]-a[k];
+      }
+      return a.name.localeCompare(b.name);
+    }
     stats.sort(function(a,b){
       var av=a[col], bv=b[col];
-      if(typeof av==="string") return dir==="asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-      return dir==="asc" ? av-bv : bv-av;
+      var primary = (typeof av==="string") ? (dir==="asc"?av.localeCompare(bv):bv.localeCompare(av)) : (dir==="asc"?av-bv:bv-av);
+      if(primary!==0) return primary;
+      return recordThenPoints(a,b);
     });
     var globalBest = bestPairingsGlobal(stats);
 
