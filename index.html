@@ -278,7 +278,7 @@
     weekHistory: [],
     unsubWeek: null,
     detailPlayer: null,
-    sortCol: "winPct",
+    sortCol: "courtPoints",
     sortDir: "desc",
     draft: {},
     draftKey: null,
@@ -506,17 +506,25 @@
   }
 
   // ---------- stats engine ----------
+  // Winning on a higher court is worth more toward standings than winning
+  // on a lower one. Unknown/out-of-range court numbers score 0.
+  var COURT_POINT_VALUES = {1:3, 2:2.5, 3:2, 4:1.5, 5:1, 6:0.5};
+  function courtPointValue(cnum){
+    var v = COURT_POINT_VALUES[parseInt(cnum,10)];
+    return v==null ? 0 : v;
+  }
+
   function computeStats(){
     var players = {};
     App.roster.forEach(function(p){
       players[p.id] = {
         id:p.id, name:p.name, gender:p.gender,
-        gw:0, gl:0, pf:0, pa:0, sessions:{},
+        gw:0, gl:0, pf:0, pa:0, courtPoints:0, sessions:{},
         partners:{}, opponents:{}
       };
     });
     function ensure(id){
-      if(!players[id]) players[id] = {id:id,name:nameOf(id),gender:genderOf(id),gw:0,gl:0,pf:0,pa:0,sessions:{},partners:{},opponents:{}};
+      if(!players[id]) players[id] = {id:id,name:nameOf(id),gender:genderOf(id),gw:0,gl:0,pf:0,pa:0,courtPoints:0,sessions:{},partners:{},opponents:{}};
       return players[id];
     }
     App.weekHistory.forEach(function(wk){
@@ -536,7 +544,7 @@
             t.ids.forEach(function(pid, idx){
               var pl = ensure(pid);
               pl.sessions[wk.id] = true;
-              if(isWin){ pl.gw++; } else { pl.gl++; }
+              if(isWin){ pl.gw++; pl.courtPoints += courtPointValue(cnum); } else { pl.gl++; }
               pl.pf += t.score; pl.pa += t.opp;
               var partnerId = t.ids[1-idx];
               if(partnerId){
@@ -571,6 +579,7 @@
       return {
         id:p.id, name:p.name, gender:p.gender,
         gw:p.gw, gl:p.gl, gp:gp, diff:p.gw-p.gl,
+        courtPoints: p.courtPoints,
         winPct: gp? p.gw/gp : 0,
         pf:p.pf, pa:p.pa, pdiff:p.pf-p.pa,
         pwinPct: (p.pf+p.pa)? p.pf/(p.pf+p.pa) : 0,
@@ -1323,9 +1332,10 @@
   function renderStandings(){
     var stats = computeStats();
     var col = App.sortCol, dir = App.sortDir;
-    // Record (win%, game differential, wins) always outranks points (point
-    // differential, point win%) as a tiebreaker, whichever column is sorted.
-    var RECORD_TIEBREAK = ["winPct","diff","gw","pdiff","pwinPct"];
+    // Standings methodology: Court Points (wins weighted by which court they
+    // came on) is the main factor, then W/L record, then point differential
+    // — in that order, as a tiebreaker no matter which column is sorted.
+    var RECORD_TIEBREAK = ["courtPoints","winPct","diff","gw","pdiff","pwinPct"];
     function recordThenPoints(a,b){
       for(var i=0;i<RECORD_TIEBREAK.length;i++){
         var k = RECORD_TIEBREAK[i];
@@ -1342,6 +1352,7 @@
     var globalBest = bestPairingsGlobal(stats);
 
     var html = '<div class="stack">';
+    html += '<div class="banner"><span>&#127942;</span><span><b>Standings rank by Court Points first</b> &mdash; a win is worth more the higher the court it\'s won on (Court 1 = 3, Court 2 = 2.5, Court 3 = 2, Court 4 = 1.5, Court 5 = 1, Court 6 = 0.5). Ties break by W/L record, then point differential.</span></div>';
     html += '<div class="panel panel-pad"><div class="section-title">Top pairings this season</div>';
     if(globalBest.length===0){
       html += '<div class="empty">Need a few more games together before pairings settle out.</div>';
@@ -1356,7 +1367,7 @@
 
     html += '<div class="panel"><div class="table-wrap"><table><thead><tr>';
     var cols = [
-      ["name","Player"],["sessions","Sessions"],["gw","W"],["gl","L"],["diff","Diff"],
+      ["name","Player"],["courtPoints","Court Pts"],["sessions","Sessions"],["gw","W"],["gl","L"],["diff","Diff"],
       ["winPct","Win%"],["pf","Pts For"],["pa","Pts Ag"],["pdiff","Pt Diff"],["pwinPct","Pt%"]
     ];
     cols.forEach(function(c){
@@ -1366,6 +1377,7 @@
     stats.forEach(function(p){
       html += '<tr data-player="'+p.id+'">';
       html += '<td>'+p.name+'</td>';
+      html += '<td class="num mono" style="font-weight:700;color:var(--court);">'+p.courtPoints.toFixed(1)+'</td>';
       html += '<td class="num">'+p.sessions+'</td>';
       html += '<td class="num">'+p.gw+'</td>';
       html += '<td class="num">'+p.gl+'</td>';
