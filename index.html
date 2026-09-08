@@ -291,7 +291,9 @@
     histEditRound: null,
     histDraft: {},
     recapWeekId: null,
-    recapReturnView: "roster"
+    recapReturnView: "roster",
+    editMatchupCourt: null,
+    swapPanelOpen: false
   };
 
   function byId(id){ return document.getElementById(id); }
@@ -321,6 +323,24 @@
       if(b && b.length===2){ m[b[0]]=b[1]; m[b[1]]=b[0]; }
     });
     return m;
+  }
+  // Every pairing that's already happened this week, strictly before
+  // beforeIndex — used to flag repeat partnerships in the matchup picker.
+  function priorPartnerPairs(week, beforeIndex){
+    var pairs = {};
+    (week.rounds||[]).forEach(function(r){
+      if(r.index>=beforeIndex) return;
+      Object.keys(r.courts).forEach(function(cnum){
+        var ct = r.courts[cnum];
+        [ct.teamA, ct.teamB].forEach(function(team){
+          if(team && team[0] && team[1]) pairs[[team[0],team[1]].sort().join("|")] = true;
+        });
+      });
+    });
+    return pairs;
+  }
+  function havePlayedTogether(pairsSet, a, b){
+    return !!pairsSet[[a,b].sort().join("|")];
   }
   function pairUp(arrivals, teammateMap){
     if(arrivals.length < 4){
@@ -708,6 +728,8 @@
     if(App.draftKey !== roundKey){
       App.draft = {};
       App.draftKey = roundKey;
+      App.editMatchupCourt = null;
+      App.swapPanelOpen = false;
     }
 
     html += '<div class="stack">';
@@ -739,23 +761,47 @@
     html += '</div></div>';
 
     html += '<div class="ladder">';
+    var pairsSoFar = priorPartnerPairs(week, round.index);
     for(var c=1;c<=N;c++){
       var court = courtView(round, c);
       var zone = (hasBench && N>=2 && (c===N-1||c===N));
       var wl = winnerLoser(court);
+      var courtHasScore = court.scoreA!=null || court.scoreB!=null;
       html += '<div class="court-card'+(zone?' zone':'')+'" data-court="'+c+'">';
       html += '<div class="court-card-head"><div class="court-num"><span class="num">'+c+'</span><span class="lbl">Court</span></div>';
       if(zone) html += '<span class="zone-chip">Loser sits</span>';
+      if(!week.finalized && !courtHasScore && App.editMatchupCourt!==c){
+        html += '<button class="btn ghost small" data-edit-matchup="'+c+'" style="padding:4px 10px;font-size:11px;">Edit matchup</button>';
+      }
       html += '</div>';
-      ["teamA","teamB"].forEach(function(key){
-        var team = court[key];
-        var won = wl && wl.winner===team;
-        var lost = wl && wl.loser===team;
-        html += '<div class="team-row'+(won?' won':'')+(lost?' lost':'')+'">';
-        html += '<div class="team-names">'+team.map(nameOf).join(' <span class="amp">&amp;</span> ')+'</div>';
-        html += '<input class="score-input" type="number" min="0" inputmode="numeric" data-court="'+c+'" data-side="'+key+'" value="'+(court[key.replace('team','score')]==null? '': court[key.replace('team','score')])+'" '+(week.finalized?'disabled':'')+'>';
-        html += '</div>';
-      });
+
+      if(App.editMatchupCourt===c){
+        var pool = court.teamA.concat(court.teamB);
+        var splits = [
+          [[pool[0],pool[1]],[pool[2],pool[3]]],
+          [[pool[0],pool[2]],[pool[1],pool[3]]],
+          [[pool[0],pool[3]],[pool[1],pool[2]]]
+        ];
+        html += '<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;">Pick who plays with who on Court '+c+':</div>';
+        splits.forEach(function(sp, i){
+          var warn = havePlayedTogether(pairsSoFar, sp[0][0], sp[0][1]) || havePlayedTogether(pairsSoFar, sp[1][0], sp[1][1]);
+          html += '<button type="button" class="btn ghost" data-pick-split="'+i+'" data-court-edit="'+c+'" style="display:flex;width:100%;justify-content:space-between;align-items:center;margin-bottom:6px;text-transform:none;font-weight:500;'+(warn?'border-color:var(--bench);':'')+'">';
+          html += '<span>'+sp[0].map(nameOf).join(' & ')+' <span class="amp">vs</span> '+sp[1].map(nameOf).join(' & ')+'</span>';
+          if(warn) html += '<span class="mono" style="color:var(--bench);font-size:10.5px;text-transform:uppercase;">&#9888; repeat partner</span>';
+          html += '</button>';
+        });
+        html += '<button class="btn ghost small" data-cancel-matchup="'+c+'">Cancel</button>';
+      } else {
+        ["teamA","teamB"].forEach(function(key){
+          var team = court[key];
+          var won = wl && wl.winner===team;
+          var lost = wl && wl.loser===team;
+          html += '<div class="team-row'+(won?' won':'')+(lost?' lost':'')+'">';
+          html += '<div class="team-names">'+team.map(nameOf).join(' <span class="amp">&amp;</span> ')+'</div>';
+          html += '<input class="score-input" type="number" min="0" inputmode="numeric" data-court="'+c+'" data-side="'+key+'" value="'+(court[key.replace('team','score')]==null? '': court[key.replace('team','score')])+'" '+(week.finalized?'disabled':'')+'>';
+          html += '</div>';
+        });
+      }
       html += '</div>';
     }
     html += '</div>';
@@ -776,11 +822,31 @@
           html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:12px;color:var(--court);">Add Court '+(N+1)+'? '+arriving.map(nameOf).join(", ")+' come off the bench to fill it.</span><button class="btn accent small" id="btnCourtYes">Yes, add</button><button class="btn ghost small" id="btnCourtNo">Cancel</button></div>';
         }
       } else {
+        var canSwap = !hasAnyScore(round);
         html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
         html += '<span class="section-title" style="margin:0;">Courts in play: '+N+'</span>';
         html += '<button class="btn ghost small" id="btnRemoveCourt" '+(canRemove?'':'disabled')+' title="'+(lastCourtHasScore?'Court '+N+' already has a score this round':'Send Court '+N+'\'s players to the bench')+'">&minus; Remove Court '+N+'</button>';
         html += '<button class="btn ghost small" id="btnAddCourt" '+(canAdd?'':'disabled')+' title="'+((week.benchQueue||[]).length<4 && N<6 ?'Needs at least 4 players on the bench':'Bring 4 from the bench onto a new court')+'">&plus; Add Court'+(N<6?' '+(N+1):'')+'</button>';
+        html += '<button class="btn ghost small" id="btnSwapToggle" '+(canSwap?'':'disabled')+' title="'+(canSwap?'Move someone who didn\'t show or had to leave':'Can\'t swap once scores are entered this round')+'">&#128256; Swap players</button>';
         html += '</div>';
+        if(App.swapPanelOpen && canSwap){
+          var participants = [];
+          for(var pc=1;pc<=N;pc++){
+            var pct2 = round.courts[pc];
+            pct2.teamA.concat(pct2.teamB).forEach(function(pid){ participants.push({id:pid, label:nameOf(pid)+' (Court '+pc+')'}); });
+          }
+          (week.benchQueue||[]).forEach(function(pid){ participants.push({id:pid, label:nameOf(pid)+' (Bench)'}); });
+          var optHtml = participants.map(function(p){ return '<option value="'+p.id+'">'+p.label+'</option>'; }).join('');
+          var optHtmlB = participants.map(function(p,pi){ return '<option value="'+p.id+'"'+(pi===1?' selected':'')+'>'+p.label+'</option>'; }).join('');
+          html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">';
+          html += '<select id="swapSelectA">'+optHtml+'</select>';
+          html += '<span style="color:var(--ink-faint);">&harr;</span>';
+          html += '<select id="swapSelectB">'+optHtmlB+'</select>';
+          html += '<button class="btn accent small" id="btnSwapGo">Swap</button>';
+          html += '<button class="btn ghost small" id="btnSwapCancel">Cancel</button>';
+          html += '</div>';
+          html += '<div id="swapWarn" class="score-warn" style="margin-top:4px;"></div>';
+        }
       }
       html += '</div>';
     }
@@ -863,6 +929,18 @@
           var lastHasScore = lastCourtNow.scoreA!=null || lastCourtNow.scoreB!=null;
           removeCourtBtn.disabled = !(rN>1 && !lastHasScore);
           removeCourtBtn.title = lastHasScore ? 'Court '+rN+' already has a score this round' : 'Send Court '+rN+'\'s players to the bench';
+        }
+        var swapToggleBtn = byId("btnSwapToggle");
+        if(swapToggleBtn){
+          var stillNoScores = !hasAnyScore(round);
+          swapToggleBtn.disabled = !stillNoScores;
+          swapToggleBtn.title = stillNoScores ? 'Move someone who didn\'t show or had to leave' : 'Can\'t swap once scores are entered this round';
+        }
+        var editMatchupBtn = document.querySelector('[data-edit-matchup="'+c+'"]');
+        if(editMatchupBtn){
+          var thisCourtNow = courtView(round, c);
+          var thisCourtScored = thisCourtNow.scoreA!=null || thisCourtNow.scoreB!=null;
+          editMatchupBtn.style.display = thisCourtScored ? "none" : "";
         }
         // live highlight without full re-render to keep focus
         var card = document.querySelector('.court-card[data-court="'+c+'"]');
@@ -1062,6 +1140,108 @@
           App.confirmCourtAction = null;
           App.draft = {};
         }).catch(function(){ courtYes.disabled = false; });
+      });
+    }
+    document.querySelectorAll("[data-edit-matchup]").forEach(function(el){
+      el.addEventListener("click", function(){
+        App.editMatchupCourt = parseInt(this.dataset.editMatchup,10);
+        render();
+      });
+    });
+    document.querySelectorAll("[data-cancel-matchup]").forEach(function(el){
+      el.addEventListener("click", function(){
+        App.editMatchupCourt = null;
+        render();
+      });
+    });
+    document.querySelectorAll("[data-pick-split]").forEach(function(el){
+      el.addEventListener("click", function(){
+        var c = this.dataset.courtEdit;
+        var idx = parseInt(this.dataset.pickSplit,10);
+        var court = round.courts[c];
+        if(court.scoreA!=null || court.scoreB!=null){
+          App.editMatchupCourt = null;
+          render();
+          return;
+        }
+        var pool = court.teamA.concat(court.teamB);
+        var splits = [
+          [[pool[0],pool[1]],[pool[2],pool[3]]],
+          [[pool[0],pool[2]],[pool[1],pool[3]]],
+          [[pool[0],pool[3]],[pool[1],pool[2]]]
+        ];
+        var chosen = splits[idx];
+        var n = courtCount(round);
+        var newCourts = {};
+        for(var i=1;i<=n;i++){ newCourts[i] = round.courts[i]; }
+        newCourts[c] = {teamA:chosen[0], teamB:chosen[1], scoreA:null, scoreB:null};
+        var updatedRound = { index: round.index, courts: newCourts, benchSnapshot: round.benchSnapshot, benchQueueBefore: round.benchQueueBefore };
+        var rounds = week.rounds.slice(0, week.rounds.length-1).concat([updatedRound]);
+        App.editMatchupCourt = null;
+        App.db.doc(weekDocPath(week.id)).update({ rounds: rounds });
+      });
+    });
+    var swapToggle = byId("btnSwapToggle");
+    if(swapToggle){
+      swapToggle.addEventListener("click", function(){
+        App.swapPanelOpen = !App.swapPanelOpen;
+        render();
+      });
+    }
+    var swapCancel = byId("btnSwapCancel");
+    if(swapCancel){
+      swapCancel.addEventListener("click", function(){
+        App.swapPanelOpen = false;
+        render();
+      });
+    }
+    var swapGo = byId("btnSwapGo");
+    if(swapGo){
+      swapGo.addEventListener("click", function(){
+        var a = byId("swapSelectA").value, b = byId("swapSelectB").value;
+        var warnEl = byId("swapWarn");
+        if(hasAnyScore(round)){
+          if(warnEl) warnEl.textContent = "A score's already been entered this round — can't swap anymore.";
+          App.swapPanelOpen = false;
+          render();
+          return;
+        }
+        if(a===b){
+          if(warnEl) warnEl.textContent = "Pick two different people to swap.";
+          return;
+        }
+        var n = courtCount(round);
+        var newCourts = {};
+        for(var i=1;i<=n;i++){
+          newCourts[i] = { teamA: round.courts[i].teamA.slice(), teamB: round.courts[i].teamB.slice(), scoreA: round.courts[i].scoreA, scoreB: round.courts[i].scoreB };
+        }
+        var newBench = (week.benchQueue||[]).slice();
+        function locate(id){
+          for(var c=1;c<=n;c++){
+            var ai = newCourts[c].teamA.indexOf(id);
+            if(ai>-1) return {court:c, team:"teamA", idx:ai};
+            var bi = newCourts[c].teamB.indexOf(id);
+            if(bi>-1) return {court:c, team:"teamB", idx:bi};
+          }
+          var be = newBench.indexOf(id);
+          if(be>-1) return {bench:be};
+          return null;
+        }
+        var locA = locate(a), locB = locate(b);
+        if(!locA || !locB){
+          if(warnEl) warnEl.textContent = "Couldn't find one of those players in this round.";
+          return;
+        }
+        function place(loc, id){
+          if(loc.bench!=null) newBench[loc.bench] = id;
+          else newCourts[loc.court][loc.team][loc.idx] = id;
+        }
+        place(locA, b);
+        place(locB, a);
+        var updatedRound = { index: round.index, courts: newCourts, benchSnapshot: round.benchSnapshot, benchQueueBefore: round.benchQueueBefore };
+        var rounds = week.rounds.slice(0, week.rounds.length-1).concat([updatedRound]);
+        App.swapPanelOpen = false;
+        App.db.doc(weekDocPath(week.id)).update({ rounds: rounds, benchQueue: newBench });
       });
     }
   }
@@ -1552,6 +1732,8 @@
     App.histEditRound = null;
     App.histDraft = {};
     App.recapWeekId = null;
+    App.editMatchupCourt = null;
+    App.swapPanelOpen = false;
     render();
   });
 
