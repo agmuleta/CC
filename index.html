@@ -514,6 +514,18 @@
     return v==null ? 0 : v;
   }
 
+  // Standings methodology: Court Points (wins weighted by which court they
+  // came on) is the main factor, then W/L record, then point differential
+  // — in that order, as a tiebreaker no matter which column is sorted, and
+  // as the sole ranking whenever the Standings page itself sorts by rank.
+  var RECORD_TIEBREAK = ["courtPoints","winPct","diff","gw","pdiff","pwinPct"];
+  function statsTied(a,b){
+    for(var i=0;i<RECORD_TIEBREAK.length;i++){
+      if(a[RECORD_TIEBREAK[i]] !== b[RECORD_TIEBREAK[i]]) return false;
+    }
+    return true;
+  }
+
   function computeStats(){
     var players = {};
     App.roster.forEach(function(p){
@@ -589,6 +601,29 @@
       };
     });
     return list;
+  }
+
+  // Live season-standings order of every rostered player, used to seed new
+  // weeks' courts (Court 1 = ranks 1-4, Court 2 = ranks 5-8, etc). Players
+  // fully tied on every Standings stat keep their relative order from
+  // App.meta.rankOrder (adjustable via the roster's rank arrows), which
+  // matters most in Week 1 or for anyone who hasn't played yet.
+  function standingsOrder(){
+    var stats = computeStats();
+    var tieRef = (App.meta && App.meta.rankOrder) || INITIAL_RANK;
+    var tieIndex = {};
+    tieRef.forEach(function(id, idx){ tieIndex[id] = idx; });
+    stats.sort(function(a,b){
+      for(var i=0;i<RECORD_TIEBREAK.length;i++){
+        var k = RECORD_TIEBREAK[i];
+        if(a[k]!==b[k]) return b[k]-a[k];
+      }
+      var ai = tieIndex.hasOwnProperty(a.id) ? tieIndex[a.id] : Infinity;
+      var bi = tieIndex.hasOwnProperty(b.id) ? tieIndex[b.id] : Infinity;
+      if(ai!==bi) return ai-bi;
+      return a.name.localeCompare(b.name);
+    });
+    return stats.map(function(p){ return p.id; });
   }
 
   function bestPairingsGlobal(stats){
@@ -1057,10 +1092,11 @@
         var seeding = [];
         for(var c=1;c<=finalN;c++){ seeding.push(courts[c].teamA[0],courts[c].teamA[1],courts[c].teamB[0],courts[c].teamB[1]); }
         seeding = seeding.concat(week.benchQueue||[]);
-        var newRank = seeding.concat((App.meta.rankOrder||[]).filter(function(id){ return seeding.indexOf(id)===-1; }));
+        // Next week's courts are seeded live off the season Standings
+        // (see standingsOrder()), not off this week's ladder finish — so
+        // finalSeeding here is kept only as a historical record of how the
+        // week ended, and no longer feeds rankOrder.
         App.db.doc(weekDocPath(week.id)).update({finalized:true, finalSeeding:seeding, finalCourtCount:finalN, rounds:rounds}).then(function(){
-          return App.db.doc("meta/state").update({rankOrder:newRank});
-        }).then(function(){
           App.confirmFinalize = false;
           App.draft = {};
           App.recapWeekId = week.id;
@@ -1332,10 +1368,6 @@
   function renderStandings(){
     var stats = computeStats();
     var col = App.sortCol, dir = App.sortDir;
-    // Standings methodology: Court Points (wins weighted by which court they
-    // came on) is the main factor, then W/L record, then point differential
-    // — in that order, as a tiebreaker no matter which column is sorted.
-    var RECORD_TIEBREAK = ["courtPoints","winPct","diff","gw","pdiff","pwinPct"];
     function recordThenPoints(a,b){
       for(var i=0;i<RECORD_TIEBREAK.length;i++){
         var k = RECORD_TIEBREAK[i];
@@ -1439,7 +1471,9 @@
     var sorted = entries.slice().sort(function(a,b){ return a.ts-b.ts; });
     var confirmedIds = sorted.slice(0,24).map(function(e){ return e.id; });
     var waitlistIds = sorted.slice(24).map(function(e){ return e.id; });
-    var rankOrder = meta.rankOrder || INITIAL_RANK;
+    var rankOrder = standingsOrder();
+    var statsById = {};
+    computeStats().forEach(function(p){ statsById[p.id] = p; });
 
     var html = '<div class="stack">';
     html += '<div class="panel panel-pad"><div class="section-title">Sign-up &mdash; '+ 'Week '+meta.signup.weekNumber+'</div>';
@@ -1457,19 +1491,22 @@
     html += '</div>';
     html += '</div>';
 
-    html += '<div class="panel"><div class="section-title" style="padding:14px 16px 0;">Full roster &middot; ranked order</div>';
+    html += '<div class="panel"><div class="section-title" style="padding:14px 16px 0;">Full roster &middot; current standings order</div>';
+    html += '<div style="font-size:12px;color:var(--ink-soft);padding:0 16px 10px;">Court '+(1)+' will get ranks 1&ndash;4, Court 2 ranks 5&ndash;8, and so on, straight off the season Standings (Court Points &rarr; W/L &rarr; point diff).</div>';
     rankOrder.forEach(function(id, idx){
       var entry = entries.find(function(e){ return e.id===id; });
       var isConfirmed = confirmedIds.indexOf(id)>-1;
       var isWaitlist = waitlistIds.indexOf(id)>-1;
+      var tiedUp = idx>0 && statsTied(statsById[id], statsById[rankOrder[idx-1]]);
+      var tiedDown = idx<rankOrder.length-1 && statsTied(statsById[id], statsById[rankOrder[idx+1]]);
       html += '<div class="roster-row">';
       html += '<span class="rank-pill">'+(idx+1)+'</span>';
       html += '<span class="name">'+nameOf(id)+'<span class="g">'+genderOf(id)+'</span></span>';
       if(isConfirmed) html += '<span class="pill confirmed">In &middot; #'+(confirmedIds.indexOf(id)+1)+'</span>';
       else if(isWaitlist) html += '<span class="pill waitlist">Wait &middot; #'+(waitlistIds.indexOf(id)+1)+'</span>';
       html += '<div class="rowbtns">';
-      html += '<button class="iconbtn" data-rank-up="'+id+'" title="Move up rank">&uarr;</button>';
-      html += '<button class="iconbtn" data-rank-down="'+id+'" title="Move down rank">&darr;</button>';
+      html += '<button class="iconbtn" data-rank-up="'+id+'" data-neighbor="'+(tiedUp?rankOrder[idx-1]:'')+'" title="'+(tiedUp?'Move up (tied on stats)':'Only movable when tied on stats')+'" '+(tiedUp?'':'disabled')+'>&uarr;</button>';
+      html += '<button class="iconbtn" data-rank-down="'+id+'" data-neighbor="'+(tiedDown?rankOrder[idx+1]:'')+'" title="'+(tiedDown?'Move down (tied on stats)':'Only movable when tied on stats')+'" '+(tiedDown?'':'disabled')+'>&darr;</button>';
       if(entry && App.confirmDropout===id){
         html += '<button class="iconbtn" data-dropout-cancel title="Cancel">&#8617;</button>';
         html += '<button class="iconbtn" style="background:var(--bench-soft);color:var(--bench);border-color:var(--bench);" data-dropout="'+id+'" title="Confirm remove">Sure?</button>';
@@ -1503,10 +1540,16 @@
       b.addEventListener("click", function(){ App.confirmDropout = null; render(); });
     });
     document.querySelectorAll("[data-rank-up]").forEach(function(b){
-      b.addEventListener("click", function(){ moveRank(this.dataset.rankUp, -1); });
+      b.addEventListener("click", function(){
+        if(this.disabled || !this.dataset.neighbor) return;
+        moveRank(this.dataset.rankUp, this.dataset.neighbor);
+      });
     });
     document.querySelectorAll("[data-rank-down]").forEach(function(b){
-      b.addEventListener("click", function(){ moveRank(this.dataset.rankDown, 1); });
+      b.addEventListener("click", function(){
+        if(this.disabled || !this.dataset.neighbor) return;
+        moveRank(this.dataset.rankDown, this.dataset.neighbor);
+      });
     });
     var startBtn = byId("btnStartWeek");
     if(startBtn) startBtn.addEventListener("click", function(){ App.confirmStartWeek = true; render(); });
@@ -1521,17 +1564,21 @@
     });
   }
 
-  function moveRank(id, dir){
+  // Swaps two players' positions in the tiebreak-order list (App.meta.rankOrder).
+  // This list only ever decides ranking among players fully tied on Standings
+  // stats, so the swap targets the specific neighbor shown in the roster UI
+  // rather than whatever happens to sit next to `id` in the raw stored list.
+  function moveRank(id, neighborId){
     var order = (App.meta.rankOrder||INITIAL_RANK).slice();
-    var i = order.indexOf(id);
-    var j = i+dir;
-    if(i<0 || j<0 || j>=order.length) return;
+    if(order.indexOf(id)===-1) order.push(id);
+    if(order.indexOf(neighborId)===-1) order.push(neighborId);
+    var i = order.indexOf(id), j = order.indexOf(neighborId);
     var t = order[i]; order[i]=order[j]; order[j]=t;
     App.db.doc("meta/state").update({rankOrder:order});
   }
 
   function startNewWeek(confirmedIds, weekNumber){
-    var ordered = (App.meta.rankOrder||INITIAL_RANK).filter(function(id){ return confirmedIds.indexOf(id)>-1; });
+    var ordered = standingsOrder().filter(function(id){ return confirmedIds.indexOf(id)>-1; });
     var fullCourts = Math.min(6, Math.floor(ordered.length/4));
     var courts = {};
     for(var c=1;c<=fullCourts;c++){
